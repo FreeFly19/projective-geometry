@@ -4,7 +4,7 @@ import numpy as np
 import open3d as o3d
 import cv2
 
-f = 1.2
+f = 0.8
 
 
 def draw_line(p1, p2, img):
@@ -32,7 +32,7 @@ def draw_line(p1, p2, img):
                 img[int(y)][int(x)] = 255
 
 
-def render_points(points, camera_position):
+def render_img(points, camera_position):
     rendered_img = np.zeros((512, 512))
 
     camera_matrix = np.array([
@@ -75,8 +75,7 @@ def render_points(points, camera_position):
             draw_line(p2, p3, rendered_img)
             draw_line(p3, p1, rendered_img)
 
-    cv2.imshow("img", rendered_img)
-    cv2.waitKey(10)
+    return rendered_img.astype(np.uint8)
 
 
 pcd = o3d.io.read_triangle_mesh("data/teapot.ply")
@@ -91,16 +90,31 @@ camera_position = np.array([0, 0, -2])
 
 start_time = time.time()
 
-while True:
-    ellapsed_time = time.time() - start_time
+record = True
 
-    alpha = ellapsed_time
+try:
+    fourcc = cv2.VideoWriter.fourcc(*'mp4v')
+    writer = cv2.VideoWriter('video.mp4', fourcc, 30.0, (512, 512)) if record else None
 
-    xz_rot = np.array([
-        [np.cos(alpha) , 0, np.sin(alpha)],
-        [       0      , 1,       0     ],
-        [-np.sin(alpha), 0, np.cos(alpha)]
-    ])
+    while True:
+        ellapsed_time = time.time() - start_time
 
-    points_in_world_coords = xz_rot @ points
-    render_points(points_in_world_coords, camera_position)
+        alpha = ellapsed_time
+
+        xz_rot = np.array([
+            [np.cos(alpha) , 0, np.sin(alpha)],
+            [       0      , 1,       0     ],
+            [-np.sin(alpha), 0, np.cos(alpha)]
+        ])
+
+        points_in_world_coords = xz_rot @ points
+        img = render_img(points_in_world_coords, camera_position)
+        cv2.imshow("img", img)
+        cv2.waitKey(10)
+        if record:
+            writer.write(cv2.cvtColor(img, cv2.COLOR_GRAY2BGR))
+
+
+except KeyboardInterrupt:
+    if record:
+        writer.release()
