@@ -8,24 +8,31 @@ import cv2
 f = 0.6
 
 
-def render_points(points):
+def render_points(points, camera_position):
     rendered_img = np.zeros((256, 256))
 
     camera_matrix = np.array([
-        [f, 0, 0],
-        [0, f, 0],
-        [0, 0, 1]
+        [f, 0, 0, -camera_position[0]],
+        [0, f, 0, -camera_position[1]],
+        [0, 0, 1, -camera_position[2]],
+        [0, 0, 0, 1],
     ])
 
     sensor_to_pixels = np.array([
-        [rendered_img.shape[1], 0, rendered_img.shape[1] / 2],
-        [0, -rendered_img.shape[0], rendered_img.shape[0] / 2],
-        [0, 0, 1],
+        [rendered_img.shape[1], 0, rendered_img.shape[1] / 2, 0],
+        [0, -rendered_img.shape[0], rendered_img.shape[0] / 2, 0],
+        [0, 0, 1, 0],
+        [0, 0, 0, 1],
     ])
 
     projection_matrix = sensor_to_pixels @ camera_matrix
 
-    pixel_point = projection_matrix @ points
+    projection_space_points = np.concatenate((points, np.ones((1, points.shape[1]))), axis=0)
+
+    pixel_point = projection_matrix @ projection_space_points
+
+    pixel_point = pixel_point[:, pixel_point[2] > 0]
+
     pixel_point = pixel_point / pixel_point[2]
 
     pixel_point = pixel_point.astype(int).T
@@ -46,11 +53,11 @@ def render_points(points):
 pcd: PointCloud = o3d.io.read_point_cloud("data/teapot.ply")
 
 points = np.array(pcd.points)
-points -= points.mean()
+# points -= points.mean()
 points = points / points.max()
 points = points.T
 
-points_translation = np.array([[0, 0, 3]])
+camera_position = np.array([0, 0, -3])
 
 start_time = time.time()
 
@@ -65,6 +72,5 @@ while True:
         [-np.sin(alpha), 0, np.cos(alpha)]
     ])
 
-    points_in_world_coords = xz_rot @ points + points_translation.T
-    render_points(points_in_world_coords)
-
+    points_in_world_coords = xz_rot @ points
+    render_points(points_in_world_coords, camera_position)
