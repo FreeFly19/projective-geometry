@@ -30,13 +30,14 @@ def render_points(points):
 
     pixel_point = pixel_point.astype(int).T
 
-    for p in pixel_point:
-        if p[0] < 0 or p[0] >= rendered_img.shape[1]:
-            continue
-        if p[1] < 0 or p[1] >= rendered_img.shape[0]:
-            continue
+    x, y = pixel_point[:, 0], pixel_point[:, 1]
 
-        rendered_img[p[1], p[0]] = 255
+    valid_mask = (x >= 0) & (x < rendered_img.shape[1]) & (y >= 0) & (y < rendered_img.shape[0])
+
+    x_valid = x[valid_mask]
+    y_valid = y[valid_mask]
+
+    rendered_img[y_valid, x_valid] = 255
 
     cv2.imshow("img", rendered_img)
     cv2.waitKey(10)
