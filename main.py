@@ -2,14 +2,38 @@ import time
 
 import numpy as np
 import open3d as o3d
-from open3d.cuda.pybind.geometry import PointCloud
 import cv2
 
-f = 0.6
+f = 1.2
+
+
+def draw_line(p1, p2, img):
+    # TODO: rewrite with
+    y_offset = abs(p1[1] - p2[1])
+    x_offset = abs(p1[0] - p2[0])
+
+    if x_offset > y_offset:
+        x_step = 1 if p1[0] < p2[0] else -1
+        y_step = (p2[1] - p1[1]) / x_offset if x_offset != 0 else 0
+        y = p1[1]
+
+        for x in range(p1[0], p2[0] + 1, x_step):
+            y += y_step
+            if y > 0 and y < img.shape[0] and x > 0 and x < img.shape[1]:
+                img[int(y)][int(x)] = 255
+    else:
+        y_step = 1 if p1[1] < p2[1] else -1
+        x_step = (p2[0] - p1[0]) / y_offset if y_offset != 0 else 0
+        x = p1[0]
+
+        for y in range(p1[1], p2[1] + 1, y_step):
+            x += x_step
+            if y > 0 and y < img.shape[0] and x > 0 and x < img.shape[1]:
+                img[int(y)][int(x)] = 255
 
 
 def render_points(points, camera_position):
-    rendered_img = np.zeros((256, 256))
+    rendered_img = np.zeros((512, 512))
 
     camera_matrix = np.array([
         [f, 0, 0, -camera_position[0]],
@@ -29,35 +53,41 @@ def render_points(points, camera_position):
 
     projection_space_points = np.concatenate((points, np.ones((1, points.shape[1]))), axis=0)
 
-    pixel_point = projection_matrix @ projection_space_points
+    projected_point = projection_matrix @ projection_space_points
 
-    pixel_point = pixel_point[:, pixel_point[2] > 0]
+    point_ahead_of_camera = projected_point[2] > 0
 
-    pixel_point = pixel_point / pixel_point[2]
-
-    pixel_point = pixel_point.astype(int).T
+    pixel_point = (projected_point / projected_point[2]).astype(int).T
 
     x, y = pixel_point[:, 0], pixel_point[:, 1]
 
-    valid_mask = (x >= 0) & (x < rendered_img.shape[1]) & (y >= 0) & (y < rendered_img.shape[0])
+    valid_mask = (x >= 0) & (x < rendered_img.shape[1]) & (y >= 0) & (y < rendered_img.shape[0]) & point_ahead_of_camera
 
-    x_valid = x[valid_mask]
-    y_valid = y[valid_mask]
+    rendered_img[(y[valid_mask]), (x[valid_mask])] = 255
 
-    rendered_img[y_valid, x_valid] = 255
+    for t in triangles:
+        p1 = pixel_point[t[0]]
+        p2 = pixel_point[t[1]]
+        p3 = pixel_point[t[2]]
+
+        if valid_mask[t[0]] or valid_mask[t[1]] or valid_mask[t[2]]:
+            draw_line(p1, p2, rendered_img)
+            draw_line(p2, p3, rendered_img)
+            draw_line(p3, p1, rendered_img)
 
     cv2.imshow("img", rendered_img)
     cv2.waitKey(10)
 
 
-pcd: PointCloud = o3d.io.read_point_cloud("data/teapot.ply")
+pcd = o3d.io.read_triangle_mesh("data/teapot.ply")
 
-points = np.array(pcd.points)
+points = np.array(pcd.vertices)
+triangles = np.array(pcd.triangles)
 # points -= points.mean()
 points = points / points.max()
 points = points.T
 
-camera_position = np.array([0, 0, -3])
+camera_position = np.array([0, 0, -2])
 
 start_time = time.time()
 
