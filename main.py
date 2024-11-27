@@ -1,31 +1,21 @@
-import math
+import time
 
 import numpy as np
 import open3d as o3d
 from open3d.cuda.pybind.geometry import PointCloud
 import cv2
 
-f = 0.7
-
-rendered_img = np.zeros((256, 256))
+f = 0.6
 
 
-def clear():
-    rendered_img[:, :] = 0
+def render_points(points):
+    rendered_img = np.zeros((256, 256))
 
-
-def render_point(p):
     camera_matrix = np.array([
         [f, 0, 0],
         [0, f, 0],
         [0, 0, 1]
     ])
-
-    p_proj = camera_matrix @ p
-    p_proj = p_proj / p[2]
-
-    if (abs(p_proj[:2]) > 0.5).sum() > 0:
-        return
 
     sensor_to_pixels = np.array([
         [rendered_img.shape[1], 0, rendered_img.shape[1] / 2],
@@ -33,12 +23,23 @@ def render_point(p):
         [0, 0, 1],
     ])
 
-    pixel_point = sensor_to_pixels @ p_proj
+    projection_matrix = sensor_to_pixels @ camera_matrix
+
+    pixel_point = projection_matrix @ points
     pixel_point = pixel_point / pixel_point[2]
 
-    pixel_point = pixel_point.astype(int)
+    pixel_point = pixel_point.astype(int).T
 
-    rendered_img[pixel_point[1], pixel_point[0]] = 255
+    for p in pixel_point:
+        if p[0] < 0 or p[0] >= rendered_img.shape[1]:
+            continue
+        if p[1] < 0 or p[1] >= rendered_img.shape[0]:
+            continue
+
+        rendered_img[p[1], p[0]] = 255
+
+    cv2.imshow("img", rendered_img)
+    cv2.waitKey(10)
 
 
 pcd: PointCloud = o3d.io.read_point_cloud("data/teapot.ply")
@@ -46,23 +47,23 @@ pcd: PointCloud = o3d.io.read_point_cloud("data/teapot.ply")
 points = np.array(pcd.points)
 points -= points.mean()
 points = points / points.max()
+points = points.T
 
+points_translation = np.array([[0, 0, 3]])
+
+start_time = time.time()
 
 while True:
-    for alpha in np.arange(0, math.pi * 2, 0.05):
-        clear()
-        xz_rot = np.array([
-            [np.cos(alpha) , 0, np.sin(alpha)],
-            [       0      , 1,       0     ],
-            [-np.sin(alpha), 0, np.cos(alpha)]
-        ])
+    ellapsed_time = time.time() - start_time
 
-        for point in points:
-            point = xz_rot @ point
-            point[2] += 3
-            render_point(point)
+    alpha = ellapsed_time
 
-        # res = cv2.resize(rendered_img, (640, 640))
-        res = rendered_img
-        cv2.imshow("img", res)
-        cv2.waitKey(10)
+    xz_rot = np.array([
+        [np.cos(alpha) , 0, np.sin(alpha)],
+        [       0      , 1,       0     ],
+        [-np.sin(alpha), 0, np.cos(alpha)]
+    ])
+
+    points_in_world_coords = xz_rot @ points + points_translation.T
+    render_points(points_in_world_coords)
+
